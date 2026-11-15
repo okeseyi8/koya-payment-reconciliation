@@ -5,14 +5,37 @@
 
 const fs = require("fs");
 
+// txn_id -> { ts, amount, status }. Only the latest attempt is kept.
+const latest = new Map();
+
+const lines = fs.readFileSync("payments.jsonl", "utf8").split("\n");
+for (const line of lines) {
+  const trimmed = line.trim();
+  if (!trimmed) continue;
+
+  let event;
+  try {
+    event = JSON.parse(trimmed);
+  } catch {
+    continue;
+  }
+
+  const txnId = event.txn_id;
+  if (!txnId) continue;
+
+  const amount = Number(String(event.amount).replace(/,/g, ""));
+  const ts = Date.parse(event.ts);
+  const prev = latest.get(txnId);
+  if (!prev || ts >= prev.ts) {
+    latest.set(txnId, { ts, amount, status: event.status });
+  }
+}
+
 let total = 0;
 let count = 0;
-
-const lines = fs.readFileSync("payments.jsonl", "utf8").split("\n").filter((l) => l.length > 0);
-for (const line of lines) {
-  const event = JSON.parse(line);
-  if (event.status === "success") {
-    total += Number(event.amount);
+for (const { amount, status } of latest.values()) {
+  if (status === "success") {
+    total += amount;
     count += 1;
   }
 }
